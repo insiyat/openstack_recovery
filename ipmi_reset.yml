@@ -1,0 +1,73 @@
+ 
+---
+- hosts: all:!localhost
+ gather_facts: false
+ become: yes
+ become_user: root
+ vars_files:
+   - group_vars/all_vault.yml
+ vars:
+   fish_user: fish
+ tasks:
+ 
+ - name: Collect only selected facts
+   ansible.builtin.setup:
+     filter: ansible_system_vendor
+ 
+ - name: Check if its is a physical server
+   debug:
+      msg: "{{ ansible_system_vendor }} doesn't support ipmitool"
+   when: ansible_system_vendor != 'Supermicro' and ansible_system_vendor != 'Dell Inc.'
+ 
+# check if the server is prod or non prod and set password accordinly
+ - name: set default root password
+   set_fact:
+     newpw: "{{ root_prod_password }}"
+ 
+ - name: Check if server is non-prod and set root password accordingly
+   set_fact:
+     newpw: "{{ root_nonprod_password }}"
+   when: inventory_hostname.startswith('dde') or
+         inventory_hostname.startswith('qde') or
+         inventory_hostname.startswith('sqde')
+ 
+ - name: Check if server is prod and set root password accordingly
+   set_fact:
+     newpw: "{{ root_prod_password }}"
+   when: inventory_hostname.startswith('de') or
+         inventory_hostname.startswith('va') or
+         inventory_hostname.startswith('sde') or  
+         inventory_hostname.startswith('sva') or
+         inventory_hostname.startswith('cva') or
+         inventory_hostname.startswith('cde')
+ 
+ - name: Run Block
+   block:
+     - name: Check server IPMI users
+       shell: ipmitool user list 1 | awk '{print $1,$2}' | egrep -v 'true|ID'
+       register: ipmi_users
+       changed_when: False
+ 
+     - name: delete all users expect Redfish
+       shell: |
+         ipmitool user channel setaccess 1 {{ item.split()[0] }} link=off ipmi=off privilege=15
+         ipmitool user disable {{ item.split()[0] }}
+         ipmitool user set name {{ item.split()[0] }} ""
+       loop:  "{{ ipmi_users.stdout_lines }}"
+       when: redfish_user not in item
+    
+     - name: create admin user
+       shell: |
+         ipmitool user set name 2 admin
+         ipmitool user enable 2
+         ipmitool user set password 2 {{ newpw }}
+         ipmitool user channel setaccess 1 2 link=on ipmi=on privilege=4
+         ipmitool user priv 2 0x4 1
+    
+     - name: reset fish password
+       shell: |
+         ipmitool user set password {{ item.split()[0] }} {{ fish_password }}
+       loop: "{{ ipmi_users.stdout_lines }}"
+       when: redfish_user in item
+ 
+   when: ansible_system_vendor == 'Supermicro' or ansible_system_vendor == 'Dell Inc.'
