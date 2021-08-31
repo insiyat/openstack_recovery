@@ -1,0 +1,57 @@
+---
+- hosts: ceph_monitors
+ gather_facts: no
+ become: yes
+ 
+ vars:
+#    region_name: "{{ site | replace('-ceph','') }}"
+   region_name: "{{ ostck_site }}"
+ 
+ tasks:
+ 
+#  - name: debug site
+#    debug: var=site
+ 
+ - name: debug region_name
+   debug: var=region_name
+ 
+ - name: make sure local dirs exists
+   file:
+     path: "{{item}}"
+     state: directory
+     mode: '0755'
+   with_items:
+     - 'ceph-ansible-tmp'
+     - 'ceph-ansible-tmp/{{ region_name }}'
+     - 'ceph-ansible-tmp/{{ region_name }}/cinder'
+     - 'ceph-ansible-tmp/{{ region_name }}/cinder/cinder-volume'
+     - 'ceph-ansible-tmp/{{ region_name }}/cinder/cinder-backup'
+     - 'ceph-ansible-tmp/{{ region_name }}/nova'
+     - 'ceph-ansible-tmp/{{ region_name }}/glance'
+ 
+ - name: copying ceph key rings for nova, cinder and glance
+   fetch:
+     src: "{{ item.src }}"
+     dest: "{{ item.dst }}"
+     flat: yes
+   loop:
+     - { src: '/etc/ceph/ceph.client.cinder.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/' }
+     - { src: '/etc/ceph/ceph.client.cinder.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/cinder-volume/' }
+     - { src: '/etc/ceph/ceph.client.cinder.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/cinder-backup/' }
+     - { src: '/etc/ceph/ceph.client.cinder.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/nova/' }
+     - { src: '/etc/ceph/ceph.client.cinder-backup.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/cinder-backup/' }
+     - { src: '/etc/ceph/ceph.client.glance.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/glance/' }
+     - { src: '/etc/ceph/ceph.client.openstack.keyring', dst: './ceph-ansible-tmp/{{ region_name }}/nova/ceph.client.nova.keyring' }
+ 
+ - name: copying ceph.conf file
+   fetch:
+     src: "{{ item.src }}"
+     dest: "{{ item.dst }}"
+     flat: yes
+   loop:
+     - { src: '/etc/ceph/ceph.conf', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/' }
+     - { src: '/etc/ceph/ceph.conf', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/cinder-volume/' }
+     - { src: '/etc/ceph/ceph.conf', dst: './ceph-ansible-tmp/{{ region_name }}/cinder/cinder-backup/' }
+     - { src: '/etc/ceph/ceph.conf', dst: './ceph-ansible-tmp/{{ region_name }}/glance/' }
+     - { src: '/etc/ceph/ceph.conf', dst: './ceph-ansible-tmp/{{ region_name }}/nova/' }
+ 
